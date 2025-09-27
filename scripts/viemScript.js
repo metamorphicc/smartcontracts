@@ -1,81 +1,54 @@
-// scripts/read-balance.ts
-import { createPublicClient, http, formatEther, createWalletClient, parseEther } from 'viem';
+import dotenv from 'dotenv';
+import { createPublicClient, http, formatEther, createWalletClient, parseEther, hexToBigInt } from 'viem';
 import { arbitrum, mainnet, ronin, sepolia, hardhat } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
-import abi from "../abis/abi.json"
+import artifact from "../artifacts/contracts/Counter.sol/Counter.json" 
+import hre from 'hardhat';
+import { assert, log } from 'console';
+import { getContract } from 'viem';
 
-const transport = http("http://127.0.0.1:8545/")
-const accountPrivateKey = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-const contractAddress = "0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9"
+dotenv.config({path: ".env"});
 
-const privateKey = privateKeyToAccount(accountPrivateKey)
+const client = createPublicClient({
+    chain: hardhat,
+    transport: http("http://127.0.0.1:8545/")
+  })
 
+  const walletClient = createWalletClient({
+    account: privateKey,
+    chain: hardhat,
+    transport: http("http://127.0.0.1:8545/")
+  })
 
 
 async function main() {
-    const client = createPublicClient({
-      chain: hardhat,
-      transport
-    })
 
-    const clientWallet = createWalletClient({
-      account: privateKey,
-      chain: hardhat,
-      transport
-    })
+  const hash = await walletClient.deployContract({
+    abi: artifact.abi,
+    bytecode: artifact.bytecode,
+    args: [process.env.OWNER]
+  }) 
+  const waitfor = await client.waitForTransactionReceipt({hash: hash})
+  const address = waitfor.contractAddress
+  console.log(waitfor.contractAddress)
+  console.log(`compiling and deploy is success`)
 
-    // const owner = await client.readContract({
-    //   address: contractAddress,
-    //   abi,
-    //   functionName: "owner"
-    // })
+  const hashProxy = getContract({
+     address: address,
+     abi: artifact.abi,
+     client: walletClient
+  });
 
-    // const showPrice = await client.readContract({
-    //   address: contractAddress,
-    //   abi,
-    //   functionName: "defaultPrice"
-    // }) 
-    // await console.log(`Default price now: ${showPrice}`);
-    
+  const owner = await hashProxy.read.owner();
+  console.log("owner:", owner);
 
-    // const setPrice = await clientWallet.writeContract({
-    //   address: contractAddress,
-    //   abi,
-    //   functionName: "setterPrice",
-    //   args: [parseEther("0.08")]
-    // })
+  const price = await hashProxy.read.defaultPrice();
+  console.log("price (wei):", price.toString());
+  console.log("price (ETH):", Number(price) / 1e18);
 
-    // const result = await client.waitForTransactionReceipt({hash: setPrice})
-    // console.log(`current status: `, result.status);
-    // console.log(`Owner name: ${owner}, default price of buying domen number: ${formatEther(showPrice)}`);
-    const showPrice = await client.readContract({
-      address: contractAddress,
-      abi,
-      functionName: "defaultPrice"
-    });
-    
-    console.log(`Старая цена: ${formatEther(showPrice)} ETH`);
-    
-    const txHash = await clientWallet.writeContract({
-      address: contractAddress,
-      abi,
-      functionName: "setterPrice",
-      args: [parseEther("0.005")]
-    });
-    
-    console.log("Транзакция отправлена:", txHash);
-    
-    const receipt = await client.waitForTransactionReceipt({ hash: txHash });
-    console.log("Статус транзакции:", receipt.status);
-    
-    const newPrice = await client.readContract({
-      address: contractAddress,
-      abi,
-      functionName: "defaultPrice"
-    });
-    
-    console.log(`Новая цена: ${formatEther(newPrice)} ETH`); 
-
+  const showAddress = await hashProxy.write.showAddress(["artem"]);
+  console.log(`address: ${showAddress}`);
+  
 }
 
 
